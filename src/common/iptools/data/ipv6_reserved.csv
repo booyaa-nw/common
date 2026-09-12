@@ -1,0 +1,14 @@
+address,scope,rfc
+::/128,Unspecified,RFC4291
+::1/128,Loopback,RFC4291
+::ffff:0:0/96,IPv4-mapped IPv6 address,RFC4291
+64:ff9b::/96,IPv4/IPv6 translation,RFC6052
+100::/64,Discard-Only Address Block,RFC6666
+2001::/32,Teredo tunneling,RFC4380
+2001:1::1/128,Port Control Protocol Anycast,RFC7723
+2001:2::/48,Benchmarking,RFC5180
+2001:db8::/32,Documentation (TEST-NET equivalent),RFC3849
+2002::/16,6to4,RFC3056
+fc00::/7,Unique Local Address (ULA),RFC4193
+fe80::/10,Link-local unicast,RFC4291
+ff00::/8,Multicast,RFC4291

@@ -1,3 +1,6 @@
-"""common package."""
+"""common: booyaa配下の各ツールから使う共通ライブラリ.
+
+現状は iptools (IPアドレス計算・ネットワーク情報取得) のみを提供する。
+"""
 
 __version__ = "0.1.0"
