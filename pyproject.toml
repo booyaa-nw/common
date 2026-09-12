@@ -1,7 +1,7 @@
 [project]
 name = "common"
 version = "0.1.0"
-description = "NWエンジニア用共通ライブラリ（IPアドレス計算・ネットワーク情報取得: iptools）"
+description = "NWエンジニア用共通ライブラリ（IPアドレス計算・ネットワーク情報取得: iptools、CLI/ログ/ping基盤）"
 requires-python = ">=3.14"
 dependencies = [
     "psutil>=6",
@@ -18,3 +18,11 @@ packages = ["src/common"]
 dev = [
     "pytest>=8",
 ]
+
+[tool.pytest.ini_options]
+# Windows環境で `%TEMP%\pytest-of-<user>` にアクセス権限の問題があり
+# (この配下のディレクトリ一覧取得でPermissionErrorになる事例をmpingで確認)、
+# tmp_path系フィクスチャの生成先をリポジトリ直下の作業用ディレクトリに固定する。
+# (根本的な%TEMP%権限修復は「00_環境開発実装」チャット側の管轄範囲のため、
+# こちらはcommon自身のpytest実行を保護するための個別対応)
+addopts = "--basetemp=.pytest_tmp"
