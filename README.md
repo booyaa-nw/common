@@ -28,8 +28,9 @@ mping内での検証(pytest・実機ping動作確認)を経て本ライブラリ
   — 標準ライブラリなので追加不要）。
 - `/31`, `/32` は RFC3021 準拠（ネットワークアドレス・ブロードキャストアドレスも含めて使用可能）。
 
-`cli`・`logging`・`ping`はいずれも例外的なOS依存(`ping.windows`)を除き、標準ライブラリのみに依存する
-自己完結モジュールとして実装している。
+`cli`・`logging`・`ping`はいずれも標準ライブラリのみに依存する自己完結モジュールとして実装しているが、
+`ping`パッケージのみOS依存の外部実装を持つ(`ping.windows`はWindows専用の`ctypes`+`iphlpapi.dll`、
+`ping.linux`はLinux専用の外部ライブラリ`icmplib`に依存する)。
 
 ## モジュール構成
 
@@ -41,7 +42,7 @@ src/common/
 │   ├── __init__.py          # OS判定によるディスパッチ、ping_async()
 │   ├── base.py               # PingResult、ICMP type定数、IP_STATUS→ICMP変換表
 │   ├── windows.py             # ctypes + iphlpapi.dll (IcmpSendEcho) 実装 (Windows専用)
-│   └── linux.py                # 未実装スタブ (NotImplementedError、icmplibで後日実装予定)
+│   └── linux.py                # icmplib(ICMPv4Socket)実装。asyncio.to_threadでオフロード
 └── iptools/
     ├── result.py            # IPToolsResult / Reason（全モジュール共通の戻り値型）
     ├── calc/                 # 純粋関数のみ。OS状態に依存しない
@@ -135,12 +136,43 @@ else:
 
 ## `cli` / `logging` / `ping` 移植時の注意点
 
-- `cli.py`(`common.cli`)・`ping/base.py`・`ping/__init__.py`・`ping/linux.py`(`common.ping`)は
+- `cli.py`(`common.cli`)・`ping/base.py`・`ping/__init__.py`(`common.ping`)は
   mping内でpytestによる検証済み。`ping/windows.py`は、mpingでの実装時にユーザー環境
   (Windows 11, nitro5-skull)での実機実行(`mping 8.8.8.8`等)によりRTT表示・CSVログ出力とも
   正常動作を確認済みだが、**`common.ping`への移植(import参照先の変更)後の実機再確認はまだ
   行っていない**。`ctypes.WinDLL`をモジュールレベルで参照するため非Windows環境ではimportできず、
   本リポジトリの開発環境(Linux)ではpytestの対象にできない制約も従来通り。
+
+### `ping/linux.py`(2026-09-13、mpingチャットにて実装)
+
+移植時点では`NotImplementedError`を送出するだけのスタブだったが、mping側からの
+「Linux版を実装してほしい」という依頼を受け、mpingチャットが直接`common`側を
+修正する形で実装した(結果はこの追記として`01_common`へ連携)。
+
+- `icmplib`の**同期API**(`ICMPv4Socket`+`ICMPRequest`)を`asyncio.to_thread`で
+  オフロードする構成(Windows実装と対になる「ブロッキング呼び出しをスレッド
+  オフロード」パターン)。`icmplib.async_ping`や`icmplib.AsyncSocket`(非同期ソケット)
+  ではなく同期APIを選んだ理由は2点: (1) 呼び出し側が1回のpingごとに`PingTarget`の
+  状態を更新する設計であること、(2) `AsyncSocket.receive`は`asyncio`の`loop.sock_recv`を
+  使う制約上、**実際に応答したホストのアドレス(`reply.source`)を常に`None`にしてしまう**
+  (icmplib公式docstringに明記された既知の制約)。TTL超過時に中継ルータのアドレスを
+  `reply_from`として取得する必要があるため、同期API側(`ICMPv4Socket.receive`)を採用した。
+- 権限: 既定で`privileged=False`(rootを必要としない`SOCK_DGRAM`ベースの非特権ICMP)。
+  Windows実装(`iphlpapi.dll`経由、admin権限不要)との体験統一が目的。カーネル側の
+  `net.ipv4.ping_group_range`設定次第で非特権ICMPが無効な環境では、ソケット作成が
+  `SocketPermissionError`で失敗し、その旨のメッセージを`PingResult.message`に返す
+  (呼び出し元でsudo実行または当該sysctl変更を促す)。
+- DFフラグ: `icmplib`自体はTTL・TOS(traffic_class)のみをサポートしDFフラグの設定手段を
+  持たないため、生ソケット(`ICMPv4Socket.sock`)に対し直接`IP_MTU_DISCOVER`
+  (`IP_PMTUDISC_DO`/`IP_PMTUDISC_WANT`)を設定して実現している(`<linux/in.h>`の値を
+  直接定義。Python標準の`socket`モジュールには公開されていないため)。
+- テスト(`tests/ping/test_linux.py`、9件)は`ICMPv4Socket`を偽の実装に差し替え、
+  実ネットワーク・root権限に依存しない形で、成功/タイムアウト/TTL超過/到達不能/
+  権限エラー/送信失敗/DFフラグ設定/`asyncio.to_thread`オフロードの各分岐を検証している。
+  本リポジトリの開発環境(Linuxコンテナ)でloopback(`127.0.0.1`)への実際のping送受信
+  (成功パス・DFフラグ設定含む)による動作確認も別途実施済みだが、**TTL超過・到達不能等の
+  実ネットワーク経由での実地確認はまだ行っていない**(開発環境の egress 制限により
+  複数ホップ先への到達性テストができないため)。実際のLinux環境での実機確認を推奨する。
 - `logging.py`(`common.logging`)の`build_logger`は、移植時点でmping自身はまだ未使用
   (rich画面表示のみで動作ログの出力を必要としていないため)。インターフェースとしては妥当と
   考えられるが、実際の利用シーンでの動作確認はまだ無い。移植にあたり`build_logger`単体の
