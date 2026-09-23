@@ -1,7 +1,8 @@
 # common
 
 booyaa配下の各ツールから使う共通ライブラリ。`iptools`（IPアドレス計算・ネットワーク情報取得）に加え、
-`cli`（CLI引数解析基盤）・`logging`（動作ログ基盤）・`ping`（ICMP echo基盤）を提供する。
+`cli`（CLI引数解析基盤）・`logging`（動作ログ基盤）・`ping`（ICMP echo基盤）・`ftp`（受信専用の
+簡易FTPサーバ基盤）を提供する。
 
 `iptools`は`C:\opt\booyaa_old\booyaa\common\iptools.py`、および`C:\opt\booyaa_old\booyaa\ipcalc\ipv4.py`等の
 ビット計算ロジックをリファレンスに、責務ごとに再構成したもの。
@@ -38,6 +39,10 @@ mping内での検証(pytest・実機ping動作確認)を経て本ライブラリ
 src/common/
 ├── cli.py                # CLI引数解析の共通基盤(BaseArgumentParser, positive_int, non_negative_float)
 ├── logging.py             # アプリケーション動作ログ構築の共通ヘルパー(build_logger)
+├── ftp.py                 # 受信専用の簡易FTPサーバ基盤(SimpleFtpServer, pyftpdlibラッパー。
+│                          #   NW機器がバックアップファイルをFTPで"push"してくる方式
+│                          #   (例: FortiAnalyzerの`execute backup all-settings ftp ...`)
+│                          #   への対応用、2026-09-22追加)
 ├── ping/                  # ICMP echo (ping) 実行の共通基盤
 │   ├── __init__.py          # OS判定によるディスパッチ、ping_async()
 │   ├── base.py               # PingResult、ICMP type定数、IP_STATUS→ICMP変換表
@@ -119,6 +124,16 @@ if result.ok:
     print(f"RTT={result.rtt*1000:.1f}ms")
 else:
     print("NG:", result.icmp_type, result.icmp_code, result.message)
+```
+
+```python
+from common.ftp import SimpleFtpServer
+
+with SimpleFtpServer(directory="./staging", user="nwadmin", password="P@ssw0rd", port=2121) as server:
+    # ここで機器側に、server.portで待受中のFTPサーバへアップロードさせるコマンドを実行する
+    received = server.wait_for_file(timeout=1800.0)
+    if received is not None:
+        print("received:", received.path, received.size, "bytes")
 ```
 
 ## 旧実装からの主な変更点(iptools)
