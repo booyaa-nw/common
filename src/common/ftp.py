@@ -157,22 +157,39 @@ class SimpleFtpServer:
         self._thread.join(timeout=timeout)
         self._thread = None
 
-    def wait_for_file(self, timeout: float = 60.0, poll_interval: float = 0.5) -> Optional[ReceivedFile]:
-        """最初にアップロードされたファイルを待つ(ポーリング)。
+    def wait_for_file(self, timeout: float = 60.0, poll_interval: float = 0.5,
+                      filename: Optional[str] = None) -> Optional[ReceivedFile]:
+        """アップロードされたファイルを待つ(ポーリング)。
 
         機器側のFTPアップロードは`SimpleFtpServer`とは別スレッド(サーバの
         イベントループ)で非同期に処理されるため、呼び出し側(機器へコマンドを
         送ってその完了を待っている側)がファイルの到着を確認したい場合はこれを使う。
-        取得できなければ(タイムアウトするまでに1件もアップロードが無ければ)`None`を返す。
+        取得できなければ(タイムアウトするまでに該当するアップロードが無ければ)`None`を返す。
+
+        Args:
+            filename: 指定時は、このファイル名(ディレクトリ部分を除いた名前)で
+                アップロードされたファイルのみを待つ。未指定時は最初にアップロードされた
+                ファイルを返す(従来の挙動)。1つのサーバを複数機器で共有する場合
+                (Alaxalaの`backup ftp`のようにポート番号を指定できず、21番の
+                サーバを同時実行中の全機器で共用せざるを得ないケース、
+                `config_backup.alaxala`参照)に、自分宛てのファイルだけを
+                待ち受けるために使う(2026-09-23追加)。
         """
+        def _find() -> Optional[ReceivedFile]:
+            for rf in self.received:
+                if filename is None or rf.filename == filename:
+                    return rf
+            return None
+
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             with self._lock:
-                if self.received:
-                    return self.received[0]
+                found = _find()
+            if found is not None:
+                return found
             time.sleep(poll_interval)
         with self._lock:
-            return self.received[0] if self.received else None
+            return _find()
 
     def __enter__(self) -> 'SimpleFtpServer':
         self.start()

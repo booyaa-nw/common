@@ -132,3 +132,30 @@ def test_multiple_uploads_are_all_recorded(ftp_server):
     assert len(ftp_server.received) == 3
     names = {r.filename for r in ftp_server.received}
     assert names == {'file0.dat', 'file1.dat', 'file2.dat'}
+
+
+def test_wait_for_file_with_filename_returns_matching_upload(ftp_server):
+    """`filename`指定時は、該当ファイル名のアップロードのみを返す(2026-09-23追加、
+    Alaxalaの`backup ftp`で21番のサーバを複数機器で共有するケース向け)。"""
+    for name in ('sw1_systembackup.dat', 'sw2_systembackup.dat'):
+        ftp = ftplib.FTP()
+        ftp.connect('127.0.0.1', ftp_server.port, timeout=10)
+        ftp.login('testuser', 'testpass')
+        ftp.storbinary(f'STOR {name}', io.BytesIO(name.encode()))
+        ftp.quit()
+
+    received = ftp_server.wait_for_file(timeout=10, filename='sw2_systembackup.dat')
+    assert received is not None
+    assert received.filename == 'sw2_systembackup.dat'
+    assert received.path.read_bytes() == b'sw2_systembackup.dat'
+
+
+def test_wait_for_file_with_filename_times_out_when_other_file_uploaded(ftp_server):
+    ftp = ftplib.FTP()
+    ftp.connect('127.0.0.1', ftp_server.port, timeout=10)
+    ftp.login('testuser', 'testpass')
+    ftp.storbinary('STOR other.dat', io.BytesIO(b'x'))
+    ftp.quit()
+
+    assert ftp_server.wait_for_file(timeout=1, filename='other.dat') is not None
+    assert ftp_server.wait_for_file(timeout=0.3, poll_interval=0.05, filename='mine.dat') is None
