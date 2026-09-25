@@ -75,19 +75,21 @@ def _classify(first_octet: int) -> str:
 class IPv4Info:
     input: str
     address: str
-    address_int: int
-    address_hex: str
     prefix_length: int
     netmask: str
     wildcard_mask: str
     network: str
-    network_int: int
     broadcast: str
-    broadcast_int: int
     host_min: str
     host_max: str
     num_hosts: int
     num_addresses: int
+    address_int: int
+    network_int: int
+    broadcast_int: int
+    address_hex: str
+    network_hex: str
+    broadcast_hex: str
     ip_class: str
     scope: str
     rfc: str
@@ -153,19 +155,21 @@ def calc(ip_str: str) -> IPToolsResult[IPv4Info]:
     info = IPv4Info(
         input=ip_str,
         address=addr_part,
-        address_int=addr_int,
-        address_hex=f"0x{addr_int:08X}",
         prefix_length=prefix,
         netmask=long2ip(mask_int),
         wildcard_mask=long2ip(wildcard_int),
         network=long2ip(network_int),
-        network_int=network_int,
         broadcast=long2ip(broadcast_int),
-        broadcast_int=broadcast_int,
         host_min=long2ip(host_min_int),
         host_max=long2ip(host_max_int),
         num_hosts=num_hosts,
         num_addresses=num_addresses,
+        address_int=addr_int,
+        network_int=network_int,
+        broadcast_int=broadcast_int,
+        address_hex=f"0x{addr_int:08X}",
+        network_hex=f"0x{network_int:08X}",
+        broadcast_hex=f"0x{broadcast_int:08X}",
         ip_class=_classify(addr_int >> 24),
         scope=scope,
         rfc=rfc,

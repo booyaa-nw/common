@@ -20,6 +20,9 @@ def test_basic_cidr():
     assert info.ip_class == "B"
     assert info.scope == "Private"
     assert info.is_private is True
+    assert info.address_hex == "0xAC10C90A"
+    assert info.network_hex == "0xAC10C900"
+    assert info.broadcast_hex == "0xAC10C9FF"
 
 
 def test_dotted_netmask_equivalent_to_cidr():
